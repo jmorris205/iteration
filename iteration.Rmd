@@ -1,0 +1,81 @@
+---
+title: "Iteration"
+author: "Me, Myself, & I"
+date: "2026-10-29"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(ggplot2)
+library(readxl)
+```
+# Functions!
+
+Start small with Z Scores :
+```{r}
+# Make random vector:
+x_vec = rnorm(n = 40, mean = 12, sd = 63)
+
+# Z-score manually:
+(x_vec - mean(x_vec)) / sd(x_vec)
+```
+Make this a function:
+```{r}
+## Write the z-score as a function:
+z_scores = function(x) {
+  
+  if (!is.numeric(x)) {
+    stop("Input x must be numeric")
+  }else if (length(x) < 5){
+    stop("x should have 5 or more numbers...")
+  }
+  
+  x_z = (x - mean(x)) / sd(x)
+  return(x_z)
+}
+
+## Check if it works: 
+z_scores(x_vec) ### WOOHOOO!!
+z_scores(rpois(4000, lambda = 12))
+```
+
+```{r}
+poisson_df = data.frame(poisson = rpois(40000, lambda = 2),
+           poisson_z = z_scores(rpois(40000, lambda = 2)))
+
+
+ggplot(poisson_df, aes(x = poisson)) +
+  geom_histogram()
+```
+
+
+## Mean and sd:
+
+```{r}
+mean(x_vec)
+sd(x_vec)
+```
+
+Write a function that returns mean and SD of an input vector:
+```{r}
+source("source/mean_and_sd.R")
+
+mean_and_sd(x_vec)
+```
+
+
+## Motivate and write another one!!
+
+```{r}
+source("source/sim_mean_sd.R")
+
+sim_mean_sd(n_obs = 40)
+```
+
+
+
+
+
+
