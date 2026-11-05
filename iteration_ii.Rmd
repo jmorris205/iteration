@@ -1,0 +1,240 @@
+---
+title: "Iteration II"
+author: "Jonathan Morris"
+date: "2026-11-05"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+library(plotly)
+library(flexdashboard)
+library(longpca)
+library(rvest)
+source("source/mean_and_sd.R")
+source("source/nsduh_process.R")
+
+## Load and process data
+data(rest_inspec)
+```
+
+
+```{r}
+im = make_interaction_model(rest_inspec, 0 ~ score * violation_description, parse_text = TRUE, to_lower = TRUE)
+core_im = core(im, core_threshold = 10)
+diagnose(im)
+pca = pca(core_im, k = 6)
+pcs = rotate(pca)
+
+streaks(pcs)
+
+pcs$column_features |> 
+  arrange(vpc_1_columns)
+
+pcs$row_features |> 
+  arrange(desc(vpc_3_rows))
+
+
+ggplot(rest_inspec, aes(x = score)) +
+  geom_histogram()
+```
+
+## Prove that lists can have anything:
+```{r}
+l = list(
+  vec_numeric = 5:17,
+  mat = matrix(1:8, nrow = 2, ncol = 4, byrow = T)
+)
+```
+
+## `for` loops next:
+```{r}
+list_norm = list(
+  a = rnorm(20, 3, 4),
+  b = rnorm(20, -14, 3),
+  c = rnorm(20, 1000, 10000),
+  d = rnorm(20, 0, 1)
+  )
+```
+
+## Get mean and SD for each sample:
+```{r}
+mean_and_sd(list_norm[[1]])
+mean_and_sd(list_norm[[2]])
+mean_and_sd(list_norm[[3]])
+mean_and_sd(list_norm[[4]])
+```
+
+
+## Do it with iteration:
+```{r}
+output = vector("list", length = 4)
+
+for (i in 1:4) {
+  output[[i]] = mean_and_sd(list_norm[[i]])
+}
+
+print(output)
+```
+
+## But... this is wayyy better!
+```{r}
+output = map(list_norm, mean_and_sd)
+print(output)
+
+output = map_df(list_norm, median)
+print(output)
+
+output = map(list_norm, IQR)
+print(output)
+
+output = map_dbl(list_norm, median)
+print(output)
+```
+
+```{r}
+listcol_df = 
+  tibble(
+    name = c("a", "b", "c", "d"),
+    samp = list_norm
+  )
+
+listcol_df |> pull(name)
+
+listcol_df |> pull(samp)
+```
+
+## Iterate the list:
+```{r}
+## Run map on a column of a data frame:
+map(pull(listcol_df, samp), mean_and_sd) 
+```
+## Really cool stuff
+```{r}
+### Create a new column with a mapped result:
+listcol_df |> 
+  mutate(
+    output = map(samp, mean_and_sd)
+  )
+
+square = function(x){
+  x_squ = x^2
+  x_squ
+}
+
+### Do it with a df
+meta = listcol_df |> 
+  mutate(
+    output = map_df(samp, mean_and_sd)
+  ) |> 
+  mutate(
+    output = output |> 
+      mutate(var = 
+               map(s, square))
+  )
+
+### Do it with a dbl
+listcol_df |> 
+  mutate(
+    output = map_dbl(samp, median)
+  )
+```
+
+## Work with NSDUH:
+```{r}
+nsduh_table <- function(html, table_num) {
+  
+  table = 
+    html |> 
+    html_table() |> 
+    nth(table_num) |>
+    slice(-1) |> 
+    select(-contains("P Value")) |>
+    pivot_longer(
+      -State,
+      names_to = "age_year", 
+      values_to = "percent") |>
+    separate(age_year, into = c("age", "year"), sep = "\\(") |>
+    mutate(
+      year = str_replace(year, "\\)", ""),
+      percent = str_replace(percent, "[a-c]$", ""),
+      percent = as.numeric(percent)) |>
+    filter(!(State %in% c("Total U.S.", "Northeast", "Midwest", "South", "West")))
+  
+  table
+}
+
+
+
+
+nsduh_url = "https://www.samhsa.gov/data/sites/default/files/NSDUHsaeShortTermCHG2015/NSDUHsaeShortTermCHG2015.htm"
+
+nsduh_html = read_html(nsduh_url)
+
+output = vector("list", 3)
+
+for (i in c(1, 4, 5)) {
+  output[[i]] = nsduh_table(nsduh_html, i)
+}
+
+nsduh_results = bind_rows(output)
+```
+
+
+## example process:
+```{r}
+output = map(table_nums, nsduh_process, html = nsduh_html)
+
+nsduh_results = 
+  map(c(1, 4, 5), nsduh_table, html = nsduh_html) |> 
+  bind_rows()
+```
+
+```{r}
+nsduh_df = 
+  tibble(
+    drug = c("marj", "cocaine", "heroin"),
+    num = c(1, 4, 5)
+  ) |> 
+  mutate(table = map(num, nsduh_table, html = nsduh_html)) |> 
+  select(-num) |> 
+  unnest(table)
+
+
+nsduh_df |> 
+  filter(age == "12-17") |> 
+  mutate(State = fct_reorder(State, percent)) |> 
+  ggplot(aes(x = State, y = percent, color = year)) +
+  geom_point() +
+  facet_grid(. ~ drug)
+```
+
+```{r}
+data("weather_df")
+
+weather_df = 
+  weather_df |> 
+  nest(data = date:tmin)
+```
+
+what if i want to do a regression of tmax on tmin for each situation:
+```{r}
+lm(tmax ~ tmin, data = pull(weather_df, data)[[1]])
+lm(tmax ~ tmin, data = pull(weather_df, data)[[2]])
+lm(tmax ~ tmin, data = pull(weather_df, data)[[3]])
+
+## Create a function to do the same thing:
+weather_lm = function(input_data) {
+  lm(tmax ~ tmin, data = input_data)
+}
+
+weather_lm(pull(weather_df, data)[[1]])
+
+lm_master = weather_df |> 
+  mutate(
+    lm_fits = map(data, weather_lm),
+    lm_sum = map(lm_fits, summary)
+  )
+```
+
